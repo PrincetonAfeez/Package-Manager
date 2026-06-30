@@ -17,16 +17,19 @@ dist/
 # Test / coverage
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 
 # Type checkers / linters
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # IDE / editor
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
@@ -34,6 +37,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project scope documents
-package_manager_scope.txt
-revised_package_manager_scope.txt
+# Generated example archives
+examples/dist/
+
+# Project scope documents (local planning; not part of the shipped package)
+/package_manager_scope.txt
+/revised_package_manager_scope.txt
