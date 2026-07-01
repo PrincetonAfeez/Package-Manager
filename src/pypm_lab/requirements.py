@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from .constraints import VersionConstraint
 from .errors import RequirementError
@@ -27,9 +27,12 @@ def validate_package_name(text: str) -> str:
     raw = text.strip()
     if not raw:
         raise RequirementError("missing package name")
-    if "/" in raw or "\\" in raw or ".." in raw:
-        raise RequirementError(f"invalid package name {text!r}: path traversal is not allowed")
+    if "/" in raw or "\\" in raw:
+        raise RequirementError(f"invalid package name {text!r}: path separators are not allowed")
     normalized = raw.lower()
+    # The regex forbids leading separators and the dot checks below forbid
+    # leading/trailing dots, so a normalized name can never be a traversal
+    # sequence; an interior ".." (as in "a..b") is just an ordinary name.
     if not _PACKAGE_RE.match(normalized) or normalized.startswith(".") or normalized.endswith("."):
         raise RequirementError(
             f"invalid package name {text!r}; use letters, numbers, dots, dashes, and underscores"
