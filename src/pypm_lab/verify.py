@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .constraints import VersionConstraint
-from .errors import ConstraintError
+from .errors import ConstraintError, InstallError
 from .integrity import hash_directory, verify_integrity
 from .lockfile import Lockfile, load_lockfile
 from .manifest import Manifest, load_manifest, manifest_path
@@ -91,7 +91,10 @@ def verify_project(project_dir: Path | str, registry: RegistryReader) -> tuple[b
     ok = True
     lockfile = load_lockfile(project_dir)
     store = ProjectStore(project_dir)
-    records = store.read_records()
+    try:
+        records = store.read_records()
+    except InstallError as exc:
+        return False, (f"installed records invalid: {exc}",)
 
     if manifest_path(project_dir).exists():
         for problem in check_manifest_lockfile_alignment(load_manifest(project_dir), lockfile):
@@ -135,7 +138,12 @@ def verify_project(project_dir: Path | str, registry: RegistryReader) -> tuple[b
         if record.integrity.lower() != locked.integrity.lower():
             ok = False
             messages.append(f"{name}: installed integrity differs from lockfile")
-        installed_path = store.root / record.path
+        try:
+            installed_path = store.resolve_record_path(record)
+        except InstallError as exc:
+            ok = False
+            messages.append(f"{name}@{locked.version}: {exc}")
+            continue
         if not installed_path.exists():
             ok = False
             messages.append(f"{name}@{locked.version}: missing installed package directory")

@@ -40,6 +40,14 @@ def test_init_add_remove_list(tmp_path):
     assert load_manifest(project).dependencies == {}
 
 
+def test_add_wildcard_constraint(tmp_path):
+    project = tmp_path / "project"
+    registry = tmp_path / "registry"
+    assert _run(project, registry, "init") == 0
+    assert _run(project, registry, "add", "alpha", "*") == 0
+    assert load_manifest(project).dependencies["alpha"] == "*"
+
+
 def test_publish_install_locked_tree_graph_verify(
     tmp_path, build_registry: Callable[..., Path], capsys
 ):
@@ -145,6 +153,30 @@ def test_install_locked_missing_lockfile(tmp_path):
     registry = tmp_path / "registry"
     assert _run(project, registry, "init") == 0
     assert _run(project, registry, "install", "--locked") == 1
+
+
+def test_install_locked_rejects_malformed_dependency_constraint(
+    tmp_path, build_registry: Callable[..., Path], capsys
+):
+    registry_dir = build_registry({"shared": {"1.0.0": {}}})
+    project = tmp_path / "project"
+    assert _run(project, registry_dir, "init") == 0
+    assert _run(project, registry_dir, "add", "shared", "1.0.0") == 0
+    assert _run(project, registry_dir, "resolve") == 0
+
+    lock_path = project / "pypm-lock.json"
+    lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
+    lock_data["packages"]["shared"]["dependencies"] = {"ghost": ">>>"}
+    lock_data["packages"]["ghost"] = {
+        "version": "1.0.0",
+        "integrity": "sha256:" + "0" * 64,
+        "dependencies": {},
+    }
+    lock_path.write_text(json.dumps(lock_data, indent=2) + "\n", encoding="utf-8")
+
+    assert _run(project, registry_dir, "install", "--locked") == 1
+    err = capsys.readouterr().err
+    assert "invalid constraint" in err
 
 
 def test_remove_makes_verify_fail_until_install(tmp_path, build_registry: Callable[..., Path]):

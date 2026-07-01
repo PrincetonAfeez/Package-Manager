@@ -19,6 +19,25 @@ from pypm_lab.versions import Version
 DIGEST = "sha256:" + "0" * 64
 
 
+def _lockfile_with_shared_dep(constraint: object) -> dict[str, object]:
+    return {
+        "lockfileVersion": 1,
+        "roots": ["alpha"],
+        "packages": {
+            "alpha": {
+                "version": "1.0.0",
+                "integrity": DIGEST,
+                "dependencies": {"shared": constraint},
+            },
+            "shared": {
+                "version": "1.0.0",
+                "integrity": DIGEST,
+                "dependencies": {},
+            },
+        },
+    }
+
+
 def _minimal_lockfile_dict(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
         "lockfileVersion": 1,
@@ -164,6 +183,22 @@ def test_load_lockfile_duplicate_keys(tmp_path):
                 },
             },
             "dependency ghost has no package entry",
+        ),
+        (
+            _lockfile_with_shared_dep(1),
+            "constraint must be a string",
+        ),
+        (
+            _lockfile_with_shared_dep([">=1.0.0"]),
+            "constraint must be a string",
+        ),
+        (
+            _lockfile_with_shared_dep({">=": "1.0.0"}),
+            "constraint must be a string",
+        ),
+        (
+            _lockfile_with_shared_dep(">>>"),
+            "invalid constraint for shared",
         ),
     ],
 )

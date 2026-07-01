@@ -13,6 +13,7 @@ authors = [{ name = "Princeton Afeez" }]
 dependencies = []
 
 [project.optional-dependencies]
+# Ranges here; exact pins in requirements-dev.txt (see requirements-dev.in).
 dev = [
   "pytest>=8,<9",
   "pytest-cov>=5,<7",
@@ -23,7 +24,7 @@ dev = [
 
 [project.urls]
 Changelog = "CHANGELOG.md"
-Repository = "https://github.com/example/pypm-lab"
+Repository = "https://github.com/PrincetonAfeez/Package-Manager"
 
 [project.scripts]
 pypm = "pypm_lab.cli:main"

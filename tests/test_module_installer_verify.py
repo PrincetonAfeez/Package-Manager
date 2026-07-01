@@ -231,13 +231,15 @@ def test_verify_installed_version_mismatch(tmp_path, build_registry: Callable[..
     write_lockfile(project, Lockfile.from_graph(graph))
     store = ProjectStore(project)
     records = store.read_records()
-    records["alpha"] = records["alpha"].__class__(
+    alpha = records["alpha"]
+    records["alpha"] = alpha.__class__(
         name="alpha",
         version="9.9.9",
-        integrity=records["alpha"].integrity,
-        tree_hash=records["alpha"].tree_hash,
-        path=records["alpha"].path,
+        integrity=alpha.integrity,
+        tree_hash=alpha.tree_hash,
+        path="store/alpha/9.9.9",
     )
+    store.package_dir("alpha", "9.9.9").mkdir(parents=True)
     store.write_records(records)
     ok, messages = verify_project(project, registry)
     assert not ok
@@ -330,3 +332,37 @@ def test_verify_registry_archive_failure(tmp_path, build_registry: Callable[...,
         "registry archive verification failed" in message or "hash mismatch" in message
         for message in messages
     )
+
+
+def test_verify_project_reports_invalid_installed_records(
+    tmp_path, build_registry: Callable[..., Path]
+):
+    registry_dir = build_registry({"alpha": {"1.0.0": {}}})
+    project = tmp_path / "project"
+    init_manifest(project)
+    add_dependency(project, "alpha", "1.0.0")
+    registry = LocalRegistry(registry_dir)
+    graph = Resolver(registry).resolve(load_manifest(project).requirements()).graph
+    install_resolved(project, graph, registry)
+    write_lockfile(project, Lockfile.from_graph(graph))
+
+    store = ProjectStore(project)
+    store.installed_path.write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "alpha": {
+                        "version": "1.0.0",
+                        "integrity": DIGEST,
+                        "treeHash": "sha256:" + "1" * 64,
+                        "path": "store/alpha/1.0.0/../../cache/sha256/evil",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ok, messages = verify_project(project, registry)
+    assert not ok
+    assert any("installed records invalid" in message for message in messages)

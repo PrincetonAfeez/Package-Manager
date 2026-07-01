@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,17 @@ from pypm_lab.store import ProjectStore
 
 DIGEST = "sha256:" + "0" * 64
 TREE = "sha256:" + "1" * 64
+
+
+def _installed_json(name: str = "alpha", **field_overrides: object) -> str:
+    record = {
+        "version": "1.0.0",
+        "integrity": DIGEST,
+        "treeHash": TREE,
+        "path": f"store/{name}/1.0.0",
+    }
+    record.update(field_overrides)
+    return json.dumps({"packages": {name: record}})
 
 
 def test_manifest_path(tmp_path):
@@ -171,8 +183,83 @@ def test_store_read_records_missing_field(tmp_path):
         '{"packages": {"alpha": {"version": "1.0.0"}}}',
         encoding="utf-8",
     )
-    with pytest.raises(InstallError, match="missing field"):
+    with pytest.raises(InstallError, match="missing field integrity"):
         store.read_records()
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (_installed_json(path="store/alpha/1.0.0/../../cache/sha256/evil"), "must not contain"),
+        (_installed_json(path="cache/sha256/evil"), "must be store/alpha/1.0.0"),
+        (_installed_json(path="../etc/passwd"), "must not contain"),
+        (_installed_json(integrity="sha1:abc"), "invalid integrity"),
+        (_installed_json(treeHash="not-a-hash"), "invalid treeHash"),
+        (_installed_json(version="1.2"), "invalid version"),
+        (_installed_json(version=1), "version must be a string"),
+        (_installed_json(path=123), "path must be a string"),
+        (
+            json.dumps(
+                {
+                    "packages": {
+                        "../evil": {
+                            "version": "1.0.0",
+                            "integrity": DIGEST,
+                            "treeHash": TREE,
+                            "path": "store/alpha/1.0.0",
+                        }
+                    }
+                }
+            ),
+            "invalid package name",
+        ),
+        (_installed_json(path="store/beta/1.0.0"), "must be store/alpha/1.0.0"),
+        (
+            json.dumps(
+                {
+                    "packages": {
+                        "alpha": {
+                            "version": "1.0.0",
+                            "integrity": DIGEST,
+                            "treeHash": TREE,
+                        }
+                    }
+                }
+            ),
+            "missing field path",
+        ),
+    ],
+)
+def test_store_read_records_rejects_tampered_fields(tmp_path, payload: str, match: str):
+    store = ProjectStore(tmp_path)
+    store.ensure()
+    store.installed_path.write_text(payload, encoding="utf-8")
+    with pytest.raises(InstallError, match=match):
+        store.read_records()
+
+
+def test_store_resolve_record_path_rejects_escape(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.ensure()
+    record = StoreRecord(
+        name="alpha",
+        version="1.0.0",
+        integrity=DIGEST,
+        tree_hash=TREE,
+        path="store/alpha/1.0.0",
+    )
+    store.package_dir("alpha", "1.0.0").mkdir(parents=True)
+    assert store.resolve_record_path(record) == store.package_dir("alpha", "1.0.0").resolve()
+
+    forged = StoreRecord(
+        name="alpha",
+        version="1.0.0",
+        integrity=DIGEST,
+        tree_hash=TREE,
+        path="cache/sha256/evil",
+    )
+    with pytest.raises(InstallError, match="must be store/alpha/1.0.0"):
+        store.resolve_record_path(forged)
 
 
 def test_store_package_dir_and_cache_path(tmp_path):

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from .errors import InstallError
+from .errors import InstallError, IntegrityError, RequirementError, VersionError
 from .fsio import atomic_write_json
 from .integrity import parse_integrity
 from .jsonio import loads_no_duplicate_keys
 from .models import StoreRecord
+from .requirements import validate_package_name
+from .versions import Version
 
 
 class ProjectStore:
@@ -36,6 +38,26 @@ class ProjectStore:
         digest = parse_integrity(integrity)
         return self.cache_dir / f"{digest}.tar.gz"
 
+    def resolve_record_path(self, record: StoreRecord) -> Path:
+        """Resolve an installed record path and ensure it stays under the store."""
+
+        relative = _validate_installed_record_path(record.path, name=record.name, version=record.version)
+        resolved = (self.root / relative).resolve()
+        root_resolved = self.root.resolve()
+        try:
+            resolved.relative_to(root_resolved)
+        except ValueError as exc:
+            raise InstallError(f"installed record for {record.name}: path escapes .pypm root") from exc
+        expected = self.package_dir(record.name, record.version).resolve()
+        try:
+            resolved.relative_to(expected)
+        except ValueError as exc:
+            raise InstallError(
+                f"installed record for {record.name}: path is outside "
+                f"store/{record.name}/{record.version}/"
+            ) from exc
+        return resolved
+
     def read_records(self) -> dict[str, StoreRecord]:
         if not self.installed_path.exists():
             return {}
@@ -49,21 +71,40 @@ class ProjectStore:
         if not isinstance(packages, dict):
             raise InstallError("installed.json packages must be an object")
         records: dict[str, StoreRecord] = {}
-        for name, record in packages.items():
+        for raw_name, record in packages.items():
+            try:
+                name = validate_package_name(raw_name)
+            except RequirementError as exc:
+                raise InstallError(f"installed record key {raw_name!r}: {exc}") from exc
             if not isinstance(record, dict):
                 raise InstallError(f"installed record for {name} must be an object")
+            for field in ("version", "integrity", "treeHash", "path"):
+                if field not in record:
+                    raise InstallError(f"installed record for {name} is missing field {field}")
+                if not isinstance(record[field], str):
+                    raise InstallError(f"installed record for {name}: field {field} must be a string")
             try:
-                records[name] = StoreRecord(
-                    name=name,
-                    version=str(record["version"]),
-                    integrity=str(record["integrity"]),
-                    tree_hash=str(record["treeHash"]),
-                    path=str(record["path"]),
-                )
-            except KeyError as exc:
+                version = Version.parse(record["version"])
+            except VersionError as exc:
                 raise InstallError(
-                    f"installed record for {name} is missing field {exc.args[0]}"
+                    f"installed record for {name}: invalid version {record['version']!r}: {exc}"
                 ) from exc
+            try:
+                parse_integrity(record["integrity"])
+            except IntegrityError as exc:
+                raise InstallError(f"installed record for {name}: invalid integrity: {exc}") from exc
+            try:
+                parse_integrity(record["treeHash"])
+            except IntegrityError as exc:
+                raise InstallError(f"installed record for {name}: invalid treeHash: {exc}") from exc
+            path = _validate_installed_record_path(record["path"], name=name, version=str(version))
+            records[name] = StoreRecord(
+                name=name,
+                version=str(version),
+                integrity=record["integrity"],
+                tree_hash=record["treeHash"],
+                path=path,
+            )
         return records
 
     def write_records(self, records: dict[str, StoreRecord]) -> None:
@@ -124,3 +165,22 @@ class ProjectStore:
                 removed.append(f"tmp/{leftover.name}")
 
         return removed
+
+
+def _validate_installed_record_path(path: str, *, name: str, version: str) -> str:
+    if "\\" in path or path.startswith("/"):
+        raise InstallError(f"installed record for {name}: path must be a relative POSIX path")
+    pure = PurePosixPath(path)
+    if pure.is_absolute():
+        raise InstallError(f"installed record for {name}: path must be a relative POSIX path")
+    if ".." in pure.parts or "" in pure.parts:
+        raise InstallError(f"installed record for {name}: path must not contain empty or parent segments")
+    expected = PurePosixPath("store") / name / version
+    if pure != expected:
+        try:
+            pure.relative_to(expected)
+        except ValueError as exc:
+            raise InstallError(
+                f"installed record for {name}: path must be {expected.as_posix()} or a subdirectory"
+            ) from exc
+    return pure.as_posix()

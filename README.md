@@ -77,7 +77,11 @@ containing a `package.json` with matching `name`/`version`/`dependencies`; see
 
 ## Version And Requirement Model
 
-Versions use `major.minor.patch` semantic-version-style triples. Supported constraints are exact versions, comparators (`>=`, `>`, `<=`, `<`), comma ranges, caret (`^1.2.3`), and tilde (`~1.2.3`).
+Versions use `major.minor.patch` semantic-version-style triples. Supported constraints are exact versions, comparators (`>=`, `>`, `<=`, `<`), comma ranges, caret (`^1.2.3`), tilde (`~1.2.3`), and wildcard (`*`).
+
+Wildcard behavior:
+
+- `*` means any non-negative semantic version (`>=0.0.0`).
 
 Caret behavior:
 
@@ -96,9 +100,10 @@ alpha@^1.2.0
 bravo@>=2.0.0,<3.0.0
 charlie@1.4.2
 delta@~1.2.0
+echo@*
 ```
 
-The CLI also accepts split forms such as `pypm add alpha ^1.2.0`.
+The CLI also accepts split forms such as `pypm add alpha ^1.2.0` or `pypm add alpha "*"`.
 
 ## Resolver Design
 
@@ -115,7 +120,7 @@ Cycles are detected during the search: an edge that would close a cycle is rejec
 
 This is a constraint-satisfaction problem over a dependency graph. Real package managers often use more sophisticated solvers such as PubGrub; PyPM Lab intentionally implements a small deterministic backtracking resolver so the graph and search behavior stay readable.
 
-The resolved result is a dependency DAG. PyPM Lab exposes graph behavior through `tree`, `why`, `graph`, topological install order, cycle detection, and resolver trace mode.
+The resolved result is a dependency DAG. PyPM Lab exposes graph behavior through `tree`, `why`, `graph`, topological install order, cycle detection, and resolver trace mode. See [ADR 0001](docs/adr/0001-deterministic-backtracking-resolver.md) for the resolver trade-offs (including why PubGrub was not implemented).
 
 ## Registry And Archive Contract
 
@@ -161,7 +166,7 @@ Archive `package.json` example:
 }
 ```
 
-Registry validation catches malformed JSON, invalid names, invalid versions, bad constraints, missing archives, path traversal, unsupported integrity algorithms, missing dependencies, hash mismatches, and archive metadata disagreement before resolution begins.
+Registry validation catches malformed JSON, invalid names, invalid versions, bad constraints, missing archives, path traversal, unsupported integrity algorithms, missing dependencies, hash mismatches, and archive metadata disagreement before resolution begins. See [ADR 0002](docs/adr/0002-local-registry-and-inert-archives.md).
 
 ## Installation And Integrity
 
@@ -173,7 +178,7 @@ Install order is topological: dependencies install before packages that require 
 
 `install` reconciles the store to the resolved set: a package dropped by `remove` (or a re-resolve) is pruned from `.pypm/store/` and `installed.json`, so `verify` stays clean. `clean` additionally prunes cache archives no longer referenced by an installed package.
 
-`resolve` writes the lockfile without installing. `install` and `update` persist the lockfile only after a successful install, so a failed install never leaves a new lockfile ahead of the store.
+`resolve` writes the lockfile without installing. `install` and `update` persist the lockfile only after a successful install, so a failed install never leaves a new lockfile ahead of the store. See [ADR 0003](docs/adr/0003-lockfile-install-verify-store-model.md) for the full lockfile, store, and verify model.
 
 ## CLI
 
@@ -222,7 +227,19 @@ python -m mypy
 python -m pytest --cov=pypm_lab --cov-report=term-missing --cov-fail-under=95
 ```
 
-PyPM Lab ships **282** tests across workflow, CLI, property-based, and module-level suites. CI enforces **95%** line coverage on `pypm_lab` (local runs currently reach **~98%**). `requirements-dev.txt` installs the project editable with the `[dev]` extra from `pyproject.toml`. Coverage thresholds live in `[tool.coverage.report]`; lint and type settings in `[tool.ruff.*]` and `[tool.mypy]`.
+PyPM Lab ships **282** tests across workflow, CLI, property-based, and module-level suites. CI enforces **95%** line coverage on `pypm_lab` (local runs currently reach **~98%**). Dev dependency **ranges** live in `pyproject.toml`; the pinned lockfile is `requirements-dev.txt`, generated from `requirements-dev.in` with [pip-tools](https://github.com/jazzband/pip-tools). After changing dev ranges, regenerate and commit:
+
+```powershell
+python -m pip install "pip-tools>=7.5,<8"
+python -m piptools compile requirements-dev.in -o requirements-dev.txt --strip-extras
+```
+
+```bash
+python -m pip install "pip-tools>=7.5,<8"
+python -m piptools compile requirements-dev.in -o requirements-dev.txt --strip-extras
+```
+
+CI runs a lockfile drift check on Python 3.11.4. Coverage thresholds live in `[tool.coverage.report]`; lint and type settings in `[tool.ruff.*]` and `[tool.mypy]`.
 
 The tests cover resolver backtracking, semver/constraints, graph algorithms, deterministic lockfiles, registry validation, install rollback, store/clean, tar safety, verify tamper detection, and CLI exit codes. Resolver tests use an in-memory registry; filesystem tests run in `pytest` temporary directories. Property-based tests (Hypothesis) check semver/constraint invariants and resolution invariance to manifest dependency order.
 
@@ -235,7 +252,7 @@ The tests cover resolver backtracking, semver/constraints, graph algorithms, det
 | `tests/test_install_round2.py`, `test_round3.py` | Install hardening regressions |
 | `tests/test_module_*.py` | Per-module exhaustive coverage |
 
-CI runs on Ubuntu across Python **3.11.4**–**3.14** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). See [CHANGELOG.md](CHANGELOG.md) for release notes.
+CI runs on Ubuntu across Python **3.11.4**–**3.14** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). See [CHANGELOG.md](CHANGELOG.md) for release notes and [`docs/adr/README.md`](docs/adr/README.md) for architecture decisions.
 
 `benchmarks/bench_resolver.py` resolves generated package universes of increasing size to make the resolver's scaling visible:
 
@@ -255,6 +272,6 @@ The graph layer targets small fixture-sized package universes. Cycle detection a
 
 Other deliberate boundaries:
 
-- **Not concurrency-safe.** The CLI takes no locks on `.pypm/` or the registry index, so it assumes a single user runs one command at a time.
+- **Not concurrency-safe.** The CLI takes no locks on `.pypm/` or the registry index, so it assumes a single user runs one command at a time ([ADR 0004](docs/adr/0004-single-user-no-locks.md)).
 - **Tree hashing scope.** `verify` hashes file paths and contents but not empty directories or file permissions, which is sufficient for inert text packages.
 - **Extraction cap.** Archives are rejected if their declared member sizes exceed a fixed total limit (header-declared sizes, not bytes actually extracted), a basic guard against decompression bombs rather than a full sandboxing layer.

@@ -32,6 +32,12 @@ def test_constraint_satisfaction_table(constraint, allowed, rejected):
     assert not parsed.allows(Version.parse(rejected))
 
 
+def test_wildcard_constraint_allows_any_semver():
+    parsed = VersionConstraint.parse("*")
+    assert parsed.allows(Version.parse("0.0.0"))
+    assert parsed.allows(Version.parse("99.99.99"))
+
+
 def test_requirement_parser_forms():
     requirement = parse_requirement("Alpha@^1.2.0")
     assert requirement.name == "alpha"
@@ -40,6 +46,11 @@ def test_requirement_parser_forms():
     split = parse_requirement_parts("bravo", ">=2.0.0,<3.0.0")
     assert split.name == "bravo"
     assert split.constraint.allows(Version.parse("2.1.0"))
+
+    wildcard = parse_requirement("echo@*")
+    assert wildcard.name == "echo"
+    assert wildcard.raw_constraint == "*"
+    assert wildcard.constraint.allows(Version.parse("0.0.0"))
 
 
 @pytest.mark.parametrize("text", ["", "../alpha", "alpha/beta", ".hidden"])

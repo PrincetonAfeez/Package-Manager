@@ -1,0 +1,9 @@
+# Dev dependency ranges live in pyproject.toml [project.optional-dependencies].dev.
+# Regenerate the pinned lockfile after changing those ranges (Python 3.11.4+):
+#
+#   python -m pip install "pip-tools>=7.5,<8"
+#   python -m piptools compile requirements-dev.in -o requirements-dev.txt --strip-extras
+#
+# CI fails if requirements-dev.txt drifts from a fresh compile.
+
+-e .[dev]

@@ -438,7 +438,15 @@ def test_verify_orphan_installed_record(tmp_path, build_registry: Callable[..., 
 
     store = ProjectStore(project)
     records = store.read_records()
-    records["ghost"] = records["alpha"]
+    alpha = records["alpha"]
+    records["ghost"] = alpha.__class__(
+        name="ghost",
+        version="1.0.0",
+        integrity=alpha.integrity,
+        tree_hash=alpha.tree_hash,
+        path="store/ghost/1.0.0",
+    )
+    store.package_dir("ghost", "1.0.0").mkdir(parents=True)
     store.write_records(records)
 
     ok, messages = verify_project(project, registry)

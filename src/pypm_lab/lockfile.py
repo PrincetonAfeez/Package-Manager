@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .errors import IntegrityError, LockfileError, VersionError
+from .constraints import VersionConstraint
+from .errors import ConstraintError, IntegrityError, LockfileError, VersionError
 from .fsio import atomic_write_text
 from .integrity import parse_integrity
 from .jsonio import loads_no_duplicate_keys
@@ -132,10 +133,16 @@ def parse_lockfile(data: dict[str, Any]) -> Lockfile:
         dependencies_data = package_data.get("dependencies", {})
         if not isinstance(dependencies_data, dict):
             raise LockfileError(f"{name}: dependencies must be an object")
-        dependencies = {
-            validate_package_name(dep_name): str(raw_constraint)
-            for dep_name, raw_constraint in sorted(dependencies_data.items())
-        }
+        dependencies: dict[str, str] = {}
+        for dep_name, raw_constraint in sorted(dependencies_data.items()):
+            dep = validate_package_name(dep_name)
+            if not isinstance(raw_constraint, str):
+                raise LockfileError(f"{name}: dependency {dep} constraint must be a string")
+            try:
+                VersionConstraint.parse(raw_constraint)
+            except ConstraintError as exc:
+                raise LockfileError(f"{name}: invalid constraint for {dep}: {exc}") from exc
+            dependencies[dep] = raw_constraint
         packages[name] = LockPackage(version=version, integrity=integrity, dependencies=dependencies)
 
     # Referential integrity: every root and every dependency edge must point to a
