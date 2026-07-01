@@ -1,5 +1,5 @@
 """Structured conflict objects for deterministic resolver explanations."""
-
+ 
 from __future__ import annotations
 
 from dataclasses import dataclass
