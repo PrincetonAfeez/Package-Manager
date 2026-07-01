@@ -1,3 +1,5 @@
+"""Tests for the dependency resolver."""
+
 import pytest
 
 from pypm_lab.lockfile import Lockfile
