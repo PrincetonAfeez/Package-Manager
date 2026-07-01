@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .errors import RegistryError
+from .fsio import atomic_write_json
 from .models import PackageVersion
 from .registry_validation import load_json_no_duplicates, validate_registry
 from .requirements import validate_package_name
@@ -85,7 +86,7 @@ class LocalRegistry:
                 raise RegistryError(f"{name}: registry entry is missing a 'versions' object")
             for raw_version, version_data in versions.items():
                 version = Version.parse(raw_version)
-                if not isinstance(version_data, dict) or "integrity" not in version_data or "archive" not in version_data:
+                if not isinstance(version_data, dict) or not {"integrity", "archive"} <= set(version_data):
                     raise RegistryError(f"{name}@{version}: registry entry is missing 'integrity' or 'archive'")
                 dependencies = {
                     validate_package_name(dep_name): raw_constraint
@@ -108,5 +109,5 @@ def init_registry(root: Path | str) -> Path:
     (registry_root / "archives").mkdir(parents=True, exist_ok=True)
     index_path = registry_root / "index.json"
     if not index_path.exists():
-        index_path.write_text(json.dumps({"packages": {}}, indent=2) + "\n", encoding="utf-8")
+        atomic_write_json(index_path, {"packages": {}})
     return index_path
