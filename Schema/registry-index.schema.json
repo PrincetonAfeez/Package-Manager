@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/registry-index.schema.json",
+  "title": "PyPM Lab Local Registry Index",
+  "description": "Schema for registry/index.json. Each package version points to an inert archive and sha256 integrity value.",
+  "type": "object",
+  "required": ["packages"],
+  "properties": {
+    "packages": {
+      "type": "object",
+      "propertyNames": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["versions"],
+        "properties": {
+          "versions": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": { "$ref": "common-definitions.schema.json#/$defs/version" },
+            "additionalProperties": {
+              "type": "object",
+              "required": ["archive", "integrity"],
+              "properties": {
+                "archive": { "$ref": "common-definitions.schema.json#/$defs/relativePath" },
+                "integrity": { "$ref": "common-definitions.schema.json#/$defs/integrity" },
+                "dependencies": { "$ref": "common-definitions.schema.json#/$defs/dependencies" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "packages": {
+        "alpha": {
+          "versions": {
+            "1.2.4": {
+              "archive": "archives/alpha-1.2.4.tar.gz",
+              "integrity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "dependencies": {
+                "shared": ">=1.0.0,<2.0.0"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

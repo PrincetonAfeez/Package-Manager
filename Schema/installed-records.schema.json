@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/installed-records.schema.json",
+  "title": "PyPM Lab Installed Records",
+  "description": "Schema for .pypm/installed.json, the project-local installed package record.",
+  "type": "object",
+  "required": ["packages"],
+  "properties": {
+    "packages": {
+      "type": "object",
+      "propertyNames": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "integrity", "treeHash", "path"],
+        "properties": {
+          "version": { "$ref": "common-definitions.schema.json#/$defs/version" },
+          "integrity": { "$ref": "common-definitions.schema.json#/$defs/integrity" },
+          "treeHash": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$",
+            "description": "sha256 tree hash of installed file paths and contents."
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^store/[a-z0-9][a-z0-9._-]*/(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

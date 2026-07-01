@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/common-definitions.schema.json",
+  "title": "PyPM Lab Common Schema Definitions",
+  "type": "object",
+  "$defs": {
+    "packageName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "not": {
+        "anyOf": [
+          { "pattern": "^\\." },
+          { "pattern": "\\.$" },
+          { "pattern": "[/\\\\]" }
+        ]
+      },
+      "description": "Normalized PyPM Lab package name: lowercase letters, numbers, dots, underscores, and dashes; no path separators."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "Strict major.minor.patch version."
+    },
+    "constraint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Version constraint accepted by PyPM Lab, such as 1.2.3, ^1.2.0, ~1.2.0, >=1.0.0,<2.0.0."
+    },
+    "integrity": {
+      "type": "string",
+      "pattern": "^sha256:[A-Fa-f0-9]{64}$",
+      "description": "sha256 integrity value."
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          { "pattern": "^/" },
+          { "pattern": "^[A-Za-z]:" },
+          { "pattern": "(^|/)\\.\\.(/|$)" },
+          { "pattern": "\\\\" }
+        ]
+      },
+      "description": "Project- or registry-relative POSIX-style path that does not escape its root."
+    },
+    "dependencies": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/packageName" },
+      "additionalProperties": { "$ref": "#/$defs/constraint" },
+      "description": "Map of package name to version constraint."
+    }
+  },
+  "additionalProperties": false
+}

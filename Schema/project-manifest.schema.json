@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/project-manifest.schema.json",
+  "title": "PyPM Lab Project Manifest",
+  "description": "Schema for project package.json created and mutated by pypm init/add/remove.",
+  "type": "object",
+  "required": ["name", "dependencies"],
+  "properties": {
+    "name": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+    "dependencies": { "$ref": "common-definitions.schema.json#/$defs/dependencies" }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "name": "demo-app",
+      "dependencies": {
+        "alpha": "^1.2.0",
+        "bravo": ">=2.0.0,<3.0.0"
+      }
+    }
+  ]
+}

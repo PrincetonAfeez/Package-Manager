@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/graph-export-json.schema.json",
+  "title": "PyPM Lab Graph JSON Export",
+  "description": "Schema for `pypm graph --format json` output.",
+  "type": "object",
+  "required": ["nodes", "edges"],
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version"],
+        "properties": {
+          "name": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+          "version": { "$ref": "common-definitions.schema.json#/$defs/version" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+          "to": { "$ref": "common-definitions.schema.json#/$defs/packageName" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

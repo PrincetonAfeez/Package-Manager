@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/install-plan.schema.json",
+  "title": "PyPM Lab Install Plan",
+  "description": "Schema for a topological install plan: dependencies before dependents.",
+  "type": "object",
+  "required": ["order"],
+  "properties": {
+    "order": {
+      "type": "array",
+      "items": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    { "order": ["shared", "alpha"] }
+  ]
+}

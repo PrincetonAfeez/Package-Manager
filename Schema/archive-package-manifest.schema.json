@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/archive-package-manifest.schema.json",
+  "title": "PyPM Lab Archive Package Manifest",
+  "description": "Schema for package.json inside an inert .tar.gz package archive.",
+  "type": "object",
+  "required": ["name", "version", "dependencies"],
+  "properties": {
+    "name": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+    "version": { "$ref": "common-definitions.schema.json#/$defs/version" },
+    "dependencies": { "$ref": "common-definitions.schema.json#/$defs/dependencies" }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "name": "alpha",
+      "version": "1.2.4",
+      "dependencies": {
+        "shared": ">=1.0.0,<2.0.0"
+      }
+    }
+  ]
+}

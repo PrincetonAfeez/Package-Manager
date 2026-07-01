@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pypm-lab.local/lockfile.schema.json",
+  "title": "PyPM Lab Lockfile",
+  "description": "Schema for pypm-lock.json. Captures exact resolved versions, integrity values, roots, and dependency edges.",
+  "type": "object",
+  "required": ["lockfileVersion", "roots", "packages"],
+  "properties": {
+    "lockfileVersion": { "const": 1 },
+    "roots": {
+      "type": "array",
+      "items": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+      "uniqueItems": true
+    },
+    "packages": {
+      "type": "object",
+      "propertyNames": { "$ref": "common-definitions.schema.json#/$defs/packageName" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "integrity", "dependencies"],
+        "properties": {
+          "version": { "$ref": "common-definitions.schema.json#/$defs/version" },
+          "integrity": { "$ref": "common-definitions.schema.json#/$defs/integrity" },
+          "dependencies": { "$ref": "common-definitions.schema.json#/$defs/dependencies" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "lockfileVersion": 1,
+      "roots": ["alpha"],
+      "packages": {
+        "alpha": {
+          "version": "1.2.4",
+          "integrity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "dependencies": {
+            "shared": ">=1.0.0,<2.0.0"
+          }
+        },
+        "shared": {
+          "version": "1.5.0",
+          "integrity": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "dependencies": {}
+        }
+      }
+    }
+  ]
+}
