@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 import shutil
-import tempfile
+from pathlib import Path
 
 from .constraints import VersionConstraint
 from .errors import RegistryError, RegistryValidationError
+from .fsio import atomic_write_json
 from .integrity import integrity_for_file
 from .models import PackageVersion
 from .registry import init_registry
@@ -65,19 +64,12 @@ def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> Packa
             "dependencies": dict(sorted(dependencies.items())),
         }
         versions[str(version)] = new_entry
-        # Validate only the newly added entry: its archive metadata must agree
-        # with the index, but dependencies need not already exist, so packages
-        # (including cyclic pairs) can be published in any order. Cross-package
-        # dependency existence is enforced later, at registry load time.
         validate_new_entry(registry_root, name, version, new_entry)
-        _write_index_atomic(index_path, data)
+        atomic_write_json(index_path, data)
     except RegistryValidationError:
         destination.unlink(missing_ok=True)
         raise
     except Exception:
-        # The archive may already have been moved into place; remove either the
-        # staged temp file or the placed archive so a failed publish leaves no
-        # orphan behind.
         destination.unlink(missing_ok=True)
         tmp_archive.unlink(missing_ok=True)
         raise
@@ -90,15 +82,3 @@ def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> Packa
         archive=destination,
         metadata={"registryArchive": destination_relative.as_posix()},
     )
-
-
-def _write_index_atomic(index_path: Path, data: dict[str, object]) -> None:
-    fd, tmp_name = tempfile.mkstemp(prefix="index-", suffix=".json", dir=str(index_path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(tmp_name, index_path)
-    except Exception:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
