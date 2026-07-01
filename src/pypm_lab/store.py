@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
+import shutil
 from pathlib import Path
-import tempfile
 
 from .errors import InstallError
+from .fsio import atomic_write_json
 from .integrity import parse_integrity
+from .jsonio import loads_no_duplicate_keys
 from .models import StoreRecord
 
 
@@ -39,9 +40,11 @@ class ProjectStore:
         if not self.installed_path.exists():
             return {}
         try:
-            data = json.loads(self.installed_path.read_text(encoding="utf-8"))
+            data = loads_no_duplicate_keys(self.installed_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise InstallError(f"malformed installed record {self.installed_path}: {exc.msg}") from exc
+        except ValueError as exc:
+            raise InstallError(f"malformed installed record {self.installed_path}: {exc}") from exc
         packages = data.get("packages", {})
         if not isinstance(packages, dict):
             raise InstallError("installed.json packages must be an object")
@@ -65,20 +68,59 @@ class ProjectStore:
 
     def write_records(self, records: dict[str, StoreRecord]) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        data = {
-            "packages": {
-                name: record.to_dict()
-                for name, record in sorted(records.items())
-            }
-        }
-        fd, tmp_name = tempfile.mkstemp(
-            prefix="installed-", suffix=".json", dir=str(self.root)
+        atomic_write_json(
+            self.installed_path,
+            {
+                "packages": {
+                    name: record.to_dict()
+                    for name, record in sorted(records.items())
+                }
+            },
         )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(data, handle, indent=2, sort_keys=True)
-                handle.write("\n")
-            os.replace(tmp_name, self.installed_path)
-        except Exception:
-            Path(tmp_name).unlink(missing_ok=True)
-            raise
+
+    def clean(self, *, dry_run: bool = False) -> list[str]:
+        """Prune store directories and cache archives not referenced by installed.json.
+
+        Reconciles the store against the recorded install set: removes orphaned
+        package directories, cache entries whose integrity digest is no longer
+        installed, and any leftover temporary files. Returns the relative paths
+        that were (or, when ``dry_run`` is set, would be) removed without deleting
+        anything.
+        """
+
+        records = self.read_records()
+        kept_paths = {record.path for record in records.values()}
+        kept_digests = {parse_integrity(record.integrity) for record in records.values()}
+        removed: list[str] = []
+
+        if self.store_dir.exists():
+            for name_dir in sorted(self.store_dir.iterdir()):
+                if not name_dir.is_dir():
+                    continue
+                for version_dir in sorted(name_dir.iterdir()):
+                    relative = version_dir.relative_to(self.root).as_posix()
+                    if relative not in kept_paths:
+                        if not dry_run:
+                            shutil.rmtree(version_dir, ignore_errors=True)
+                        removed.append(relative)
+                if not dry_run and name_dir.exists() and not any(name_dir.iterdir()):
+                    name_dir.rmdir()
+
+        if self.cache_dir.exists():
+            for cache_file in sorted(self.cache_dir.glob("*.tar.gz")):
+                digest = cache_file.name.removesuffix(".tar.gz")
+                if digest not in kept_digests:
+                    if not dry_run:
+                        cache_file.unlink(missing_ok=True)
+                    removed.append(f"cache/sha256/{cache_file.name}")
+
+        if self.tmp_dir.exists():
+            for leftover in sorted(self.tmp_dir.iterdir()):
+                if not dry_run:
+                    if leftover.is_dir():
+                        shutil.rmtree(leftover, ignore_errors=True)
+                    else:
+                        leftover.unlink(missing_ok=True)
+                removed.append(f"tmp/{leftover.name}")
+
+        return removed
