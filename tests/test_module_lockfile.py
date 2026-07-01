@@ -95,6 +95,20 @@ def test_load_lockfile_duplicate_keys(tmp_path):
         ([], "must be a JSON object"),
         ({"lockfileVersion": 99}, "unsupported lockfileVersion"),
         ({"lockfileVersion": 1, "roots": {}}, "roots must be a list"),
+        (
+            {
+                "lockfileVersion": 1,
+                "roots": [123],
+                "packages": {
+                    "123": {
+                        "version": "1.0.0",
+                        "integrity": DIGEST,
+                        "dependencies": {},
+                    }
+                },
+            },
+            "lockfile root 0 must be a string",
+        ),
         ({"lockfileVersion": 1, "roots": [], "packages": []}, "packages must be an object"),
         (
             {

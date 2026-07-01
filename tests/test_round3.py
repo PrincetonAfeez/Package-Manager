@@ -362,6 +362,20 @@ def test_publish_non_object_dependencies(tmp_path, make_archive: Callable[..., P
         publish_archive(tmp_path / "registry", archive)
 
 
+def test_publish_rejects_non_string_archive_name(tmp_path):
+    build_root = tmp_path / "build" / "123-1.0.0"
+    build_root.mkdir(parents=True)
+    (build_root / "package.json").write_text(
+        json.dumps({"name": 123, "version": "1.0.0", "dependencies": {}}),
+        encoding="utf-8",
+    )
+    archive = tmp_path / "123-1.0.0.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(build_root, arcname="123-1.0.0")
+    with pytest.raises(RegistryError, match="archive metadata name must be a string"):
+        publish_archive(tmp_path / "registry", archive)
+
+
 def test_publish_rolls_back_on_validation_failure(tmp_path, make_archive: Callable[..., Path], monkeypatch):
     archive = make_archive("alpha", "1.0.0")
     registry = tmp_path / "registry"

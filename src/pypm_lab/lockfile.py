@@ -108,7 +108,12 @@ def parse_lockfile(data: dict[str, Any]) -> Lockfile:
     roots_data = data.get("roots", [])
     if not isinstance(roots_data, list):
         raise LockfileError("lockfile roots must be a list")
-    roots = tuple(sorted(validate_package_name(str(root)) for root in roots_data))
+    roots_list: list[str] = []
+    for index, root in enumerate(roots_data):
+        if not isinstance(root, str):
+            raise LockfileError(f"lockfile root {index} must be a string")
+        roots_list.append(validate_package_name(root))
+    roots = tuple(sorted(roots_list))
     packages_data = data.get("packages")
     if not isinstance(packages_data, dict):
         raise LockfileError("lockfile packages must be an object")

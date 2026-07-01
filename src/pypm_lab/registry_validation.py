@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .constraints import VersionConstraint
-from .errors import RegistryValidationError
+from .errors import RegistryError, RegistryValidationError
 from .integrity import integrity_for_file, parse_integrity
 from .jsonio import loads_no_duplicate_keys
 from .requirements import RequirementError, validate_package_name
@@ -30,6 +30,45 @@ def load_json_no_duplicates(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise RegistryValidationError([f"{path} must contain a JSON object"])
     return data
+
+
+def parse_archive_manifest_fields(manifest: dict[str, Any]) -> tuple[str, Version, dict[str, str]]:
+    """Validate archive ``package.json`` fields and return normalized metadata."""
+
+    raw_name = manifest.get("name")
+    if raw_name is None:
+        raise RegistryError("archive metadata name is missing")
+    if not isinstance(raw_name, str):
+        raise RegistryError("archive metadata name must be a string")
+    try:
+        name = validate_package_name(raw_name)
+    except RequirementError as exc:
+        raise RegistryError(f"archive metadata has invalid name: {exc}") from exc
+
+    raw_version = manifest.get("version")
+    if raw_version is None:
+        raise RegistryError("archive metadata version is missing")
+    if not isinstance(raw_version, str):
+        raise RegistryError("archive metadata version must be a string")
+    try:
+        version = Version.parse(raw_version)
+    except VersionError as exc:
+        raise RegistryError(f"archive metadata has invalid version: {exc}") from exc
+
+    dependencies_data = manifest.get("dependencies", {})
+    if not isinstance(dependencies_data, dict):
+        raise RegistryError("archive dependencies must be an object")
+    dependencies: dict[str, str] = {}
+    for raw_dep_name, raw_constraint in dependencies_data.items():
+        try:
+            dependency_name = validate_package_name(raw_dep_name)
+        except RequirementError as exc:
+            raise RegistryError(f"archive dependency name is invalid: {exc}") from exc
+        if not isinstance(raw_constraint, str):
+            raise RegistryError(f"dependency {dependency_name} constraint must be a string")
+        VersionConstraint.parse(raw_constraint)
+        dependencies[dependency_name] = raw_constraint
+    return name, version, dict(sorted(dependencies.items()))
 
 
 def validate_registry(
@@ -254,36 +293,15 @@ def _validate_archive_manifest_agreement(
     errors: list[str],
 ) -> None:
     try:
-        archive_name = validate_package_name(str(manifest.get("name", "")))
-    except RequirementError as exc:
-        errors.append(f"{name}@{version}: archive metadata has invalid name: {exc}")
-        archive_name = ""
-    try:
-        archive_version = Version.parse(str(manifest.get("version", "")))
-    except VersionError as exc:
-        errors.append(f"{name}@{version}: archive metadata has invalid version: {exc}")
-        archive_version = None
-
-    if archive_name and archive_name != name:
-        errors.append(f"{name}@{version}: archive metadata name is {archive_name}, expected {name}")
-    if archive_version is not None and archive_version != version:
-        errors.append(f"{name}@{version}: archive metadata version is {archive_version}, expected {version}")
-
-    archive_dependencies = manifest.get("dependencies", {})
-    if not isinstance(archive_dependencies, dict):
-        errors.append(f"{name}@{version}: archive dependencies must be an object")
+        archive_name, archive_version, normalized_archive_dependencies = parse_archive_manifest_fields(manifest)
+    except RegistryError as exc:
+        errors.append(f"{name}@{version}: {exc}")
         return
-    normalized_archive_dependencies: dict[str, str] = {}
-    for dependency_name, raw_constraint in archive_dependencies.items():
-        try:
-            normalized_dependency = validate_package_name(dependency_name)
-        except RequirementError as exc:
-            errors.append(f"{name}@{version}: archive dependency name is invalid: {exc}")
-            continue
-        if not isinstance(raw_constraint, str):
-            errors.append(f"{name}@{version}: archive dependency {normalized_dependency} constraint must be a string")
-            continue
-        normalized_archive_dependencies[normalized_dependency] = raw_constraint
+
+    if archive_name != name:
+        errors.append(f"{name}@{version}: archive metadata name is {archive_name}, expected {name}")
+    if archive_version != version:
+        errors.append(f"{name}@{version}: archive metadata version is {archive_version}, expected {version}")
 
     if normalized_archive_dependencies != dependencies:
         errors.append(f"{name}@{version}: archive metadata dependencies disagree with registry index")

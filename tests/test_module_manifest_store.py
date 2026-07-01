@@ -84,6 +84,16 @@ def test_load_manifest_invalid_name(tmp_path):
         load_manifest(project)
 
 
+def test_load_manifest_rejects_non_string_name(tmp_path):
+    project = _project(tmp_path)
+    manifest_path(project).write_text(
+        json.dumps({"name": 123, "dependencies": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match="manifest name must be a string"):
+        load_manifest(project)
+
+
 def test_load_manifest_dependencies_not_object(tmp_path):
     project = _project(tmp_path)
     manifest_path(project).write_text(

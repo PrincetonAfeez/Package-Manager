@@ -214,6 +214,34 @@ def test_validate_archive_metadata_invalid_name(tmp_path, make_archive: Callable
         validate_index_data(registry, data, verify_archives=True)
 
 
+def test_validate_archive_metadata_non_string_name(tmp_path):
+    import tarfile
+
+    from pypm_lab.integrity import integrity_for_file
+
+    build_root = tmp_path / "build" / "123-1.0.0"
+    build_root.mkdir(parents=True)
+    (build_root / "package.json").write_text(
+        json.dumps({"name": 123, "version": "1.0.0", "dependencies": {}}),
+        encoding="utf-8",
+    )
+    archive = tmp_path / "123-1.0.0.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(build_root, arcname="123-1.0.0")
+    registry = tmp_path / "registry"
+    (registry / "archives").mkdir(parents=True)
+    placed = registry / "archives" / archive.name
+    placed.write_bytes(archive.read_bytes())
+    entry = {
+        "archive": f"archives/{archive.name}",
+        "integrity": integrity_for_file(placed),
+        "dependencies": {},
+    }
+    data = {"packages": {"123": {"versions": {"1.0.0": entry}}}}
+    with pytest.raises(RegistryValidationError, match="archive metadata name must be a string"):
+        validate_index_data(registry, data, verify_archives=True)
+
+
 def test_validate_registry_archive_path_escapes_root(tmp_path):
     registry = tmp_path / "registry"
     registry.mkdir()

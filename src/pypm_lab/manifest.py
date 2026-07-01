@@ -48,8 +48,11 @@ def load_manifest(project_dir: Path | str) -> Manifest:
         raise ManifestError(f"malformed manifest {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
+    raw_name = data.get("name", "demo-app")
+    if not isinstance(raw_name, str):
+        raise ManifestError("manifest name must be a string")
     try:
-        name = validate_package_name(str(data.get("name", "demo-app")))
+        name = validate_package_name(raw_name)
     except RequirementError as exc:
         raise ManifestError(str(exc)) from exc
     dependencies = data.get("dependencies", {})

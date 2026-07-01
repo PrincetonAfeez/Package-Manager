@@ -6,7 +6,6 @@ import os
 import shutil
 from pathlib import Path
 
-from .constraints import VersionConstraint
 from .errors import RegistryError, RegistryValidationError
 from .fsio import atomic_write_json
 from .integrity import integrity_for_file
@@ -14,11 +13,10 @@ from .models import PackageVersion
 from .registry import init_registry
 from .registry_validation import (
     load_json_no_duplicates,
+    parse_archive_manifest_fields,
     read_archive_manifest,
     validate_new_entry,
 )
-from .requirements import validate_package_name
-from .versions import Version
 
 
 def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> PackageVersion:
@@ -29,18 +27,7 @@ def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> Packa
         raise RegistryError(f"archive does not exist: {source_archive}")
 
     manifest = read_archive_manifest(source_archive)
-    name = validate_package_name(str(manifest.get("name", "")))
-    version = Version.parse(str(manifest.get("version", "")))
-    dependencies_data = manifest.get("dependencies", {})
-    if not isinstance(dependencies_data, dict):
-        raise RegistryError("archive dependencies must be an object")
-    dependencies: dict[str, str] = {}
-    for raw_name, raw_constraint in dependencies_data.items():
-        dependency_name = validate_package_name(raw_name)
-        if not isinstance(raw_constraint, str):
-            raise RegistryError(f"dependency {dependency_name} constraint must be a string")
-        VersionConstraint.parse(raw_constraint)
-        dependencies[dependency_name] = raw_constraint
+    name, version, dependencies = parse_archive_manifest_fields(manifest)
 
     index_path = registry_root / "index.json"
     data = load_json_no_duplicates(index_path)
@@ -61,7 +48,7 @@ def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> Packa
         new_entry = {
             "archive": destination_relative.as_posix(),
             "integrity": integrity,
-            "dependencies": dict(sorted(dependencies.items())),
+            "dependencies": dependencies,
         }
         versions[str(version)] = new_entry
         validate_new_entry(registry_root, name, version, new_entry)
@@ -77,7 +64,7 @@ def publish_archive(registry_dir: Path | str, archive_path: Path | str) -> Packa
     return PackageVersion(
         name=name,
         version=version,
-        dependencies=dict(sorted(dependencies.items())),
+        dependencies=dependencies,
         integrity=integrity,
         archive=destination,
         metadata={"registryArchive": destination_relative.as_posix()},
