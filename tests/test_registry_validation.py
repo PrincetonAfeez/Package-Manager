@@ -1,8 +1,9 @@
 """Registry validation rejects malformed indexes and inconsistent archives."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -76,7 +77,8 @@ def test_rejects_missing_archive(tmp_path):
 
 
 def test_rejects_missing_integrity(tmp_path):
-    index = {"packages": {"alpha": {"versions": {"1.0.0": {"archive": "archives/alpha-1.0.0.tar.gz", "dependencies": {}}}}}}
+    version = {"archive": "archives/alpha-1.0.0.tar.gz", "dependencies": {}}
+    index = {"packages": {"alpha": {"versions": {"1.0.0": version}}}}
     registry = _write_registry(tmp_path, index)
     with pytest.raises(RegistryValidationError, match="missing integrity"):
         validate_registry(registry)
@@ -104,14 +106,16 @@ def test_rejects_archive_path_traversal(tmp_path):
 
 
 def test_rejects_malformed_dependency_constraint(tmp_path):
-    index = {"packages": {"alpha": {"versions": {"1.0.0": _entry("archives/a.tar.gz", dependencies={"alpha": ">>1.0"})}}}}
+    entry = _entry("archives/a.tar.gz", dependencies={"alpha": ">>1.0"})
+    index = {"packages": {"alpha": {"versions": {"1.0.0": entry}}}}
     registry = _write_registry(tmp_path, index)
     with pytest.raises(RegistryValidationError, match="malformed dependency constraint"):
         validate_registry(registry)
 
 
 def test_rejects_dependency_on_missing_package(tmp_path):
-    index = {"packages": {"alpha": {"versions": {"1.0.0": _entry("archives/a.tar.gz", dependencies={"ghost": ">=1.0.0"})}}}}
+    entry = _entry("archives/a.tar.gz", dependencies={"ghost": ">=1.0.0"})
+    index = {"packages": {"alpha": {"versions": {"1.0.0": entry}}}}
     registry = _write_registry(tmp_path, index)
     with pytest.raises(RegistryValidationError, match="dependency on missing package ghost"):
         validate_registry(registry)
@@ -134,7 +138,8 @@ def test_rejects_archive_metadata_name_disagreement(tmp_path, make_archive: Call
     (registry / "archives").mkdir(parents=True)
     placed = registry / "archives" / archive.name
     placed.write_bytes(archive.read_bytes())
-    index = {"packages": {"beta": {"versions": {"1.0.0": _entry(f"archives/{archive.name}", integrity_for_file(placed))}}}}
+    entry = _entry(f"archives/{archive.name}", integrity_for_file(placed))
+    index = {"packages": {"beta": {"versions": {"1.0.0": entry}}}}
     (registry / "index.json").write_text(json.dumps(index), encoding="utf-8")
     with pytest.raises(RegistryValidationError, match="archive metadata name"):
         validate_registry(registry)
