@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .errors import IntegrityError, LockfileError, VersionError
+from .fsio import atomic_write_text
 from .integrity import parse_integrity
 from .jsonio import loads_no_duplicate_keys
 from .models import ResolvedGraph, ResolvedPackage
@@ -38,7 +39,7 @@ class Lockfile:
     roots: tuple[str, ...]
 
     @classmethod
-    def from_graph(cls, graph: ResolvedGraph) -> "Lockfile":
+    def from_graph(cls, graph: ResolvedGraph) -> Lockfile:
         packages = {
             name: LockPackage(
                 version=package.version,
@@ -81,7 +82,7 @@ def lockfile_path(project_dir: Path | str) -> Path:
 
 def write_lockfile(project_dir: Path | str, lockfile: Lockfile) -> Path:
     path = lockfile_path(project_dir)
-    path.write_text(lockfile.dumps(), encoding="utf-8")
+    atomic_write_text(path, lockfile.dumps())
     return path
 
 
@@ -136,4 +137,20 @@ def parse_lockfile(data: dict[str, Any]) -> Lockfile:
             for dep_name, raw_constraint in sorted(dependencies_data.items())
         }
         packages[name] = LockPackage(version=version, integrity=integrity, dependencies=dependencies)
+
+    # Referential integrity: every root and every dependency edge must point to a
+    # package that exists in the lockfile, so the lockfile describes a complete,
+    # self-contained resolved graph. This keeps `tree`, `why`, `graph`, and
+    # `install` consistent rather than letting a dangling edge crash `why`.
+    known = set(packages)
+    for root in roots:
+        if root not in known:
+            raise LockfileError(f"lockfile root {root} has no package entry")
+    for name, locked in sorted(packages.items()):
+        for dependency in sorted(locked.dependencies):
+            if dependency not in known:
+                raise LockfileError(
+                    f"{name}: dependency {dependency} has no package entry in the lockfile"
+                )
+
     return Lockfile(packages=dict(sorted(packages.items())), roots=roots)
