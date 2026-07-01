@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tarfile
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 
 import pytest
 
