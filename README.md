@@ -6,14 +6,17 @@ It is not compatible with pip, PyPI, wheels, Poetry lockfiles, npm packages, vir
 
 ## Quick Start
 
+PyPM Lab requires Python 3.11.4 or newer (it extracts archives with the tarfile `data` safety filter, available from 3.11.4).
+
 ```powershell
-python -m pip install -e .
+python -m pip install -r requirements-dev.txt
+python examples\build_archives.py        # writes sample archives into examples\dist\
 pypm init
 # Publish every package the project will resolve. Publish order is unconstrained
 # (a package may be published before its dependencies), but all dependencies must
 # exist in the registry before `resolve`/`install` runs.
-pypm publish path\to\shared-1.5.0.tar.gz
-pypm publish path\to\alpha-1.2.4.tar.gz
+pypm publish examples\dist\shared-1.5.0.tar.gz
+pypm publish examples\dist\alpha-1.2.4.tar.gz
 pypm add alpha ^1.2.0
 pypm resolve --trace
 pypm install
@@ -24,11 +27,33 @@ pypm verify
 pypm install --locked
 ```
 
-Here `alpha-1.2.4` declares a dependency on `shared`, so both archives are
-published before resolving. `pypm install` is reproducible by default: it reuses
-an existing `pypm-lock.json` when that lockfile still satisfies the manifest, and
-only re-resolves when the lockfile is missing or stale. Use `pypm update` to force
-re-resolution to the newest compatible graph.
+On Linux or macOS, use forward slashes in paths (`examples/dist/`, `examples/dist/shared-1.5.0.tar.gz`, etc.).
+
+```bash
+python -m pip install -r requirements-dev.txt
+python examples/build_archives.py
+pypm init
+pypm publish examples/dist/shared-1.5.0.tar.gz
+pypm publish examples/dist/alpha-1.2.4.tar.gz
+pypm add alpha ^1.2.0
+pypm resolve --trace
+pypm install
+pypm verify
+```
+
+`python examples\build_archives.py` builds sample inert archives for a small
+dependency diamond (`alpha` and `bravo` both depend on `shared`). The quick start
+above uses only `shared` and `alpha`; `bravo-2.1.0.tar.gz` is also built if you
+want to experiment with a second root dependency. After `pypm resolve`, run
+`pypm install` — `resolve` updates the lockfile only and prints a note when
+`.pypm/` is out of sync. `pypm install` is reproducible by default: it reuses an
+existing `pypm-lock.json` when that lockfile still satisfies the manifest, and
+only re-resolves when the lockfile is missing or stale. Use `pypm update` to
+force re-resolution to the newest compatible graph.
+
+An archive is just a `.tar.gz` whose top-level directory is `<name>-<version>/`
+containing a `package.json` with matching `name`/`version`/`dependencies`; see
+[`examples/build_archives.py`](examples/build_archives.py) for the exact layout.
 
 ## Project Files
 
@@ -144,12 +169,17 @@ Install order is topological: dependencies install before packages that require 
 
 `install --locked` reads `pypm-lock.json`, skips resolution, installs exact pinned versions, and verifies pinned hashes.
 
-`verify` checks lockfile entries, registry archives, installed records, installed package directories, and content hashes. It exits nonzero if integrity checks fail.
+`verify` checks manifest-lockfile alignment, lockfile reachability from roots, lockfile entries, registry dependency metadata, registry archives, installed records, installed package directories, content hashes, and the lockfile's internal constraint consistency. It exits nonzero if integrity checks fail.
+
+`install` reconciles the store to the resolved set: a package dropped by `remove` (or a re-resolve) is pruned from `.pypm/store/` and `installed.json`, so `verify` stays clean. `clean` additionally prunes cache archives no longer referenced by an installed package.
+
+`resolve` writes the lockfile without installing. `install` and `update` persist the lockfile only after a successful install, so a failed install never leaves a new lockfile ahead of the store.
 
 ## CLI
 
 ```text
-pypm init
+pypm --version
+pypm init [--name <project-name>]
 pypm add <pkg> <constraint>
 pypm add <requirement>
 pypm remove <pkg>
@@ -158,26 +188,73 @@ pypm install [--locked]
 pypm update
 pypm list
 pypm tree
-pypm why <pkg>
+pypm why <pkg> [--all]
 pypm graph [--format adjacency|json|dot]
+pypm outdated [--strict]
 pypm verify
+pypm clean [--dry-run]
 pypm publish <archive>
 ```
+
+`why` shows the shortest path by default; `why --all` shows every path. `outdated` lists installed packages with newer registry releases (noting the newest version still allowed by the manifest constraint) and reports lockfile packages that are missing from the registry; use `--strict` to exit `1` when any package is missing from the registry (not when newer compatible versions exist). `add` and `remove` print a stderr note when a lockfile already exists but no longer matches the manifest or installed store. `clean --dry-run` reports what would be pruned without deleting anything.
+
+### Exit codes
+
+- `0` — success (including `verify` passing, `why` finding the package, and informational commands such as `outdated` without `--strict`).
+- `1` — a runtime error: unsatisfiable constraints, a dependency cycle, a hash mismatch, a missing package, a malformed manifest/lockfile/registry index, a failed atomic install, a failing `verify`, `outdated --strict` with missing registry packages, or `why` on a package that is not in the resolved graph.
+- `2` — a usage error: no subcommand, an unknown command, or invalid arguments (reported by the argument parser).
 
 ## Testing Strategy
 
 Install the development tools and run the checks with:
 
 ```powershell
-python -m pip install -e .[dev]
-python -m pytest
+python -m pip install -r requirements-dev.txt
+python -m ruff check src tests examples benchmarks
 python -m mypy
+python -m pytest --cov=pypm_lab --cov-report=term-missing --cov-fail-under=95
 ```
 
-The tests focus on the pure resolver, parser, semver/constraint layer, graph algorithms, deterministic lockfile serialization, registry validation, integrity failure, locked installs, and verify tamper detection. Resolver tests use an in-memory registry so graph and constraint behavior can be tested without filesystem installation. Installer, store, publish, and validation tests run entirely inside `pytest` temporary directories, so they never touch real system packages. Type checking is configured in `pyproject.toml` under `[tool.mypy]`.
+```bash
+python -m pip install -r requirements-dev.txt
+python -m ruff check src tests examples benchmarks
+python -m mypy
+python -m pytest --cov=pypm_lab --cov-report=term-missing --cov-fail-under=95
+```
+
+PyPM Lab ships **282** tests across workflow, CLI, property-based, and module-level suites. CI enforces **95%** line coverage on `pypm_lab` (local runs currently reach **~98%**). `requirements-dev.txt` installs the project editable with the `[dev]` extra from `pyproject.toml`. Coverage thresholds live in `[tool.coverage.report]`; lint and type settings in `[tool.ruff.*]` and `[tool.mypy]`.
+
+The tests cover resolver backtracking, semver/constraints, graph algorithms, deterministic lockfiles, registry validation, install rollback, store/clean, tar safety, verify tamper detection, and CLI exit codes. Resolver tests use an in-memory registry; filesystem tests run in `pytest` temporary directories. Property-based tests (Hypothesis) check semver/constraint invariants and resolution invariance to manifest dependency order.
+
+| Files | Focus |
+|-------|--------|
+| `tests/test_resolver.py`, `test_graph_lockfile.py`, `test_versions_requirements.py` | Resolver, graph, parsers |
+| `tests/test_registry_validation.py`, `test_registry_install_verify.py` | Registry and install/verify integration |
+| `tests/test_workflow.py`, `test_cli.py`, `test_robustness.py` | End-to-end CLI workflows |
+| `tests/test_properties.py` | Hypothesis property tests |
+| `tests/test_install_round2.py`, `test_round3.py` | Install hardening regressions |
+| `tests/test_module_*.py` | Per-module exhaustive coverage |
+
+CI runs on Ubuntu across Python **3.11.4**–**3.14** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+`benchmarks/bench_resolver.py` resolves generated package universes of increasing size to make the resolver's scaling visible:
+
+```powershell
+python benchmarks/bench_resolver.py
+```
+
+```bash
+python benchmarks/bench_resolver.py
+```
 
 ## Limitations And Non-Goals
 
 PyPM Lab does not execute package contents, build wheels, manage environments, publish to a public index, authenticate users, manage ownership, moderate packages, or claim production security. The optional Django + HTMX registry browser is intentionally stretch-only and would call the same service layer rather than owning resolver logic.
 
 The graph layer targets small fixture-sized package universes. Cycle detection and topological sort use iterative depth-first search so they are not bounded by Python's recursion limit, but the `tree` and `why` renderers walk the resolved DAG recursively and enumerate every path, so they assume the modest graph sizes this project is built to demonstrate.
+
+Other deliberate boundaries:
+
+- **Not concurrency-safe.** The CLI takes no locks on `.pypm/` or the registry index, so it assumes a single user runs one command at a time.
+- **Tree hashing scope.** `verify` hashes file paths and contents but not empty directories or file permissions, which is sufficient for inert text packages.
+- **Extraction cap.** Archives are rejected if their declared member sizes exceed a fixed total limit (header-declared sizes, not bytes actually extracted), a basic guard against decompression bombs rather than a full sandboxing layer.
