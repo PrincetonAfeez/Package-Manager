@@ -1,0 +1,8 @@
+# Development, test, lint, and type-check tooling for PyPM Lab.
+# Installs the package in editable mode with the [dev] extra from pyproject.toml.
+#
+#   python -m pip install -r requirements-dev.txt
+#
+# Keep this file in sync with [project.optional-dependencies].dev in pyproject.toml.
+
+-e .[dev]
