@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 import re
+from pathlib import Path
 
 from .errors import IntegrityError
 
@@ -27,7 +27,7 @@ def parse_integrity(integrity: str) -> str:
     match = _INTEGRITY_RE.match(integrity)
     if not match:
         raise IntegrityError(
-            f"invalid integrity {integrity!r}; expected sha256:<64 lowercase hex chars>"
+            f"invalid integrity {integrity!r}; expected sha256:<64 hex characters>"
         )
     return match.group(1).lower()
 
