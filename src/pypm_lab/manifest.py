@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
-from .errors import ManifestError
+from .errors import ManifestError, RequirementError
+from .fsio import atomic_write_text
 from .jsonio import loads_no_duplicate_keys
 from .requirements import Requirement, parse_requirement_parts, validate_package_name
 
@@ -47,7 +48,10 @@ def load_manifest(project_dir: Path | str) -> Manifest:
         raise ManifestError(f"malformed manifest {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
-    name = str(data.get("name", "demo-app"))
+    try:
+        name = validate_package_name(str(data.get("name", "demo-app")))
+    except RequirementError as exc:
+        raise ManifestError(str(exc)) from exc
     dependencies = data.get("dependencies", {})
     if not isinstance(dependencies, dict):
         raise ManifestError("manifest dependencies must be an object")
@@ -63,7 +67,10 @@ def load_manifest(project_dir: Path | str) -> Manifest:
 
 def save_manifest(project_dir: Path | str, manifest: Manifest) -> Path:
     path = manifest_path(project_dir)
-    path.write_text(json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_text(
+        path,
+        json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
+    )
     return path
 
 
@@ -73,7 +80,21 @@ def init_manifest(project_dir: Path | str, *, name: str | None = None) -> Manife
     path = manifest_path(project_path)
     if path.exists():
         return load_manifest(project_path)
-    manifest = Manifest(name=name or project_path.resolve().name.lower().replace(" ", "-"), dependencies={})
+    try:
+        if name is not None:
+            project_name = validate_package_name(name)
+        else:
+            derived = project_path.resolve().name.lower().replace(" ", "-")
+            try:
+                project_name = validate_package_name(derived)
+            except RequirementError as exc:
+                raise ManifestError(
+                    f"cannot derive project name from directory {project_path.name!r}: {exc}. "
+                    "Choose a directory whose name normalizes to a valid package name."
+                ) from exc
+    except RequirementError as exc:
+        raise ManifestError(str(exc)) from exc
+    manifest = Manifest(name=project_name, dependencies={})
     save_manifest(project_path, manifest)
     return manifest
 
