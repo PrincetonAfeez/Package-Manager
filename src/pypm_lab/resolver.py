@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Protocol, Sequence
+from typing import Protocol
 
 from .conflicts import CandidateRejection, Conflict, ConstraintEvidence
 from .constraints import VersionConstraint
@@ -160,7 +161,7 @@ class Resolver:
                 self._record(f"backtracking from {package}@{version}: {reason}")
                 attempted.append(CandidateRejection(version, reason))
 
-        if last_child_conflict is not None and not initial_rejections:
+        if last_child_conflict is not None:
             raise _BacktrackFailure(last_child_conflict)
         if detected_cycle is not None:
             message = f"Dependency cycle detected: {' -> '.join(detected_cycle)}."
