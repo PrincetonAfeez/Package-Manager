@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from .errors import VersionError
 
@@ -23,7 +23,7 @@ class Version:
             raise VersionError(f"version parts must be non-negative: {self!r}")
 
     @classmethod
-    def parse(cls, text: str) -> "Version":
+    def parse(cls, text: str) -> Version:
         value = text.strip()
         match = _VERSION_RE.match(value)
         if not match:
