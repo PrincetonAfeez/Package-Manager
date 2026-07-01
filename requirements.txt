@@ -1,0 +1,8 @@
+# PyPM Lab runtime requirements
+#
+# The package itself has no third-party runtime dependencies (see pyproject.toml).
+# Install the project with:
+#
+#   python -m pip install -e .
+#
+# For development tools, use requirements-dev.txt instead.
