@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .errors import ConstraintError
 from .versions import Version
@@ -46,11 +46,11 @@ class VersionConstraint:
     comparators: tuple[Comparator, ...]
 
     @classmethod
-    def any(cls) -> "VersionConstraint":
+    def any(cls) -> VersionConstraint:
         return cls("*", (Comparator(">=", Version(0, 0, 0)),))
 
     @classmethod
-    def parse(cls, text: str) -> "VersionConstraint":
+    def parse(cls, text: str) -> VersionConstraint:
         raw = text.strip()
         if not raw:
             raise ConstraintError("missing version constraint")
