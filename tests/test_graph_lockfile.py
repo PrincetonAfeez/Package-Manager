@@ -1,3 +1,5 @@
+"""Tests for graph and lockfile functionality."""
+
 from pypm_lab.graph import detect_cycle, export_graph, topological_sort, why_paths
 from pypm_lab.lockfile import Lockfile
 from pypm_lab.models import ResolvedGraph, ResolvedPackage
