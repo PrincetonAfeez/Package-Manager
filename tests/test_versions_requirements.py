@@ -1,3 +1,5 @@
+"""Tests for version and requirement parsing."""
+
 import pytest
 
 from pypm_lab.constraints import VersionConstraint
@@ -44,6 +46,16 @@ def test_requirement_parser_forms():
 def test_invalid_package_names(text):
     with pytest.raises(RequirementError):
         validate_package_name(text)
+
+
+def test_package_name_rejects_separators_with_clear_message():
+    with pytest.raises(RequirementError, match="path separators"):
+        validate_package_name("alpha/beta")
+
+
+def test_package_name_allows_interior_dots():
+    # "a..b" is an ordinary name, not a path traversal sequence.
+    assert validate_package_name("a..b") == "a..b"
 
 
 def test_missing_requirement_constraint_is_reported():
