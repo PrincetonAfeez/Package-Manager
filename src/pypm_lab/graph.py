@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Iterator, Mapping
+from collections.abc import Iterator, Mapping
 
 from .errors import GraphError
 from .models import ResolvedGraph
@@ -53,7 +53,10 @@ def detect_cycle(edges: Mapping[str, tuple[str, ...] | list[str]]) -> list[str] 
 def topological_sort(graph: ResolvedGraph | Mapping[str, tuple[str, ...] | list[str]]) -> list[str]:
     """Return dependencies before dependents (iterative post-order DFS)."""
 
-    edges = graph.edges() if isinstance(graph, ResolvedGraph) else dict(graph)
+    if isinstance(graph, ResolvedGraph):
+        edges = graph.edges()
+    else:
+        edges = {name: tuple(dependencies) for name, dependencies in graph.items()}
     cycle = detect_cycle(edges)
     if cycle:
         raise GraphError(f"cycle detected: {' -> '.join(cycle)}")
@@ -120,13 +123,17 @@ def why_paths(graph: ResolvedGraph, target: str) -> list[list[str]]:
     return paths
 
 
-def format_why(graph: ResolvedGraph, target: str) -> str:
-    paths = why_paths(graph, target)
+def format_why(graph: ResolvedGraph, target: str, paths: list[list[str]] | None = None) -> str:
+    if paths is None:
+        paths = why_paths(graph, target)
     if not paths:
         return f"{target} is not present in the resolved graph."
     lines = [f"{target} is installed because:"]
     for path in paths:
-        rendered = " -> ".join(graph.packages[name].identifier for name in path)
+        rendered = " -> ".join(
+            graph.packages[name].identifier if name in graph.packages else name
+            for name in path
+        )
         lines.append(f"  - {rendered}")
     return "\n".join(lines)
 
