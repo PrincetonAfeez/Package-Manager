@@ -1,4 +1,4 @@
-"""Shared JSON loading helpers.
+"""Shared JSON loading helpers 
 
 The manifest, lockfile, and registry index are all authoritative project files,
 so they are parsed with duplicate-key detection. JSON normally keeps the last
