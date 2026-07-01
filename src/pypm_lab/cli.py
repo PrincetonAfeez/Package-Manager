@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -29,9 +30,22 @@ from .store import ProjectStore
 from .verify import check_manifest_lockfile_alignment, verify_project
 
 Handler = Callable[[argparse.Namespace], int]
+_LOGGER = logging.getLogger("pypm_lab")
+
+
+def configure_logging() -> None:
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
+    _LOGGER.setLevel(logging.INFO)
+    _LOGGER.propagate = True
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
     if not hasattr(args, "handler"):
@@ -41,13 +55,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return handler(args)
     except ResolutionFailed as exc:
-        print(exc.conflict.explain(), file=sys.stderr)
+        _LOGGER.error("%s", exc.conflict.explain())
         return 1
     except RegistryValidationError as exc:
-        print(exc, file=sys.stderr)
+        _LOGGER.error("%s", exc)
         return 1
     except PyPMError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        _LOGGER.error("error: %s", exc)
         return 1
 
 
@@ -323,7 +337,7 @@ def _print_sync_note(project_dir: str | Path) -> None:
         return
     manifest = load_manifest(project_dir)
     if not _lockfile_satisfies_manifest(manifest, lockfile):
-        print(_SYNC_NOTE, file=sys.stderr)
+        _LOGGER.warning("%s", _SYNC_NOTE)
         return
     _print_resolve_store_note(project_dir, lockfile)
 
@@ -333,12 +347,12 @@ def _print_resolve_store_note(project_dir: str | Path, lockfile: Lockfile) -> No
     expected = set(lockfile.packages)
     installed = set(records)
     if installed != expected:
-        print(_STORE_SYNC_NOTE, file=sys.stderr)
+        _LOGGER.warning("%s", _STORE_SYNC_NOTE)
         return
     for name, locked in lockfile.packages.items():
         record = records.get(name)
         if record is None or record.version != str(locked.version):
-            print(_STORE_SYNC_NOTE, file=sys.stderr)
+            _LOGGER.warning("%s", _STORE_SYNC_NOTE)
             return
 
 

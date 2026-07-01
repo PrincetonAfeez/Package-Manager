@@ -182,9 +182,19 @@ Install order is topological: dependencies install before packages that require 
 
 ## CLI
 
+### Global options
+
+```text
+pypm [--project-dir <path>] [--registry <path>] <command> [...]
+```
+
+- `--project-dir <path>` — project directory containing `package.json`, `pypm-lock.json`, and `.pypm/` state. Default: current directory.
+- `--registry <path>` — local registry directory. Relative paths are resolved under `--project-dir`; absolute paths are used as-is. Default: `registry`.
+
 ```text
 pypm --version
 pypm init [--name <project-name>]
+pypm publish <archive>
 pypm add <pkg> <constraint>
 pypm add <requirement>
 pypm remove <pkg>
@@ -198,8 +208,9 @@ pypm graph [--format adjacency|json|dot]
 pypm outdated [--strict]
 pypm verify
 pypm clean [--dry-run]
-pypm publish <archive>
 ```
+
+`publish` adds an inert package archive to the local registry after validating its `package.json` metadata and recording its archive path, dependencies, and `sha256:` integrity in `registry/index.json`. It is local-only: no PyPI, pip, cloud index, accounts, or multi-user publishing.
 
 `why` shows the shortest path by default; `why --all` shows every path. `outdated` lists installed packages with newer registry releases (noting the newest version still allowed by the manifest constraint) and reports lockfile packages that are missing from the registry; use `--strict` to exit `1` when any package is missing from the registry (not when newer compatible versions exist). `add` and `remove` print a stderr note when a lockfile already exists but no longer matches the manifest or installed store. `clean --dry-run` reports what would be pruned without deleting anything.
 

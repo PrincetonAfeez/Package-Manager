@@ -42,7 +42,7 @@ def _run(project: Path, registry: Path, *args: str) -> int:
 
 
 def test_add_remove_print_sync_note_when_lockfile_is_stale(
-    tmp_path, build_registry: Callable[..., Path], capsys
+    tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog
 ):
     registry_dir = build_registry({"alpha": {"1.0.0": {}}, "bravo": {"1.0.0": {}}})
     project = tmp_path / "project"
@@ -53,15 +53,16 @@ def test_add_remove_print_sync_note_when_lockfile_is_stale(
     capsys.readouterr()
 
     assert _run(project, registry_dir, "remove", "bravo") == 0
-    err = capsys.readouterr().err
-    assert "sync lockfile and .pypm/" in err
+    capsys.readouterr()
+    assert "sync lockfile and .pypm/" in pypm_caplog.text
 
 
-def test_add_does_not_print_sync_note_without_lockfile(tmp_path, capsys):
+def test_add_does_not_print_sync_note_without_lockfile(tmp_path, capsys, pypm_caplog):
     project = tmp_path / "project"
     registry = tmp_path / "registry"
     assert _run(project, registry, "init") == 0
     assert _run(project, registry, "add", "alpha", "^1.0.0") == 0
+    assert pypm_caplog.text == ""
     assert capsys.readouterr().err == ""
 
 
@@ -73,17 +74,18 @@ def test_init_with_custom_name(tmp_path, capsys):
     assert "initialized" in capsys.readouterr().out
 
 
-def test_cli_resolution_failed_exit_code(tmp_path, build_registry: Callable[..., Path], capsys):
+def test_cli_resolution_failed_exit_code(tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog):
     registry_dir = build_registry({"alpha": {"1.0.0": {"ghost": ">=1.0.0"}}})
     project = tmp_path / "project"
     init_manifest(project)
     add_dependency(project, "alpha", "1.0.0")
     assert _run(project, registry_dir, "resolve") == 1
-    err = capsys.readouterr().err
-    assert "ghost" in err.lower() or "missing" in err.lower()
+    capsys.readouterr()
+    diagnostics = pypm_caplog.text.lower()
+    assert "ghost" in diagnostics or "missing" in diagnostics
 
 
-def test_cli_registry_validation_error_exit_code(tmp_path, capsys):
+def test_cli_registry_validation_error_exit_code(tmp_path, pypm_caplog):
     registry = tmp_path / "registry"
     registry.mkdir()
     (registry / "index.json").write_text('{"packages": {"alpha": {}}}', encoding="utf-8")
@@ -91,22 +93,22 @@ def test_cli_registry_validation_error_exit_code(tmp_path, capsys):
     init_manifest(project)
     add_dependency(project, "alpha", "1.0.0")
     assert _run(project, registry, "resolve") == 1
-    assert capsys.readouterr().err
+    assert pypm_caplog.text
 
 
-def test_cli_pypm_error_exit_code(tmp_path, capsys):
+def test_cli_pypm_error_exit_code(tmp_path, pypm_caplog):
     project = tmp_path / "project"
     registry = tmp_path / "registry"
     assert _run(project, registry, "add", "alpha", "1.0.0") == 1
-    assert "error:" in capsys.readouterr().err
+    assert "error:" in pypm_caplog.text
 
 
-def test_cli_remove_unknown_dependency(tmp_path, capsys):
+def test_cli_remove_unknown_dependency(tmp_path, pypm_caplog):
     project = tmp_path / "project"
     registry = tmp_path / "registry"
     assert _run(project, registry, "init") == 0
     assert _run(project, registry, "remove", "missing") == 1
-    assert "error:" in capsys.readouterr().err
+    assert "error:" in pypm_caplog.text
 
 
 def test_constraint_empty_and_malformed():

@@ -129,15 +129,15 @@ def test_outdated_strict_exits_nonzero(tmp_path, build_registry: Callable[..., P
 
 
 def test_resolve_warns_when_store_is_out_of_sync(
-    tmp_path, build_registry: Callable[..., Path], capsys
+    tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog
 ):
     registry_dir = build_registry({"shared": {"1.0.0": {}}})
     project = tmp_path / "project"
     assert _run(project, registry_dir, "init") == 0
     assert _run(project, registry_dir, "add", "shared", "1.0.0") == 0
     assert _run(project, registry_dir, "resolve") == 0
-    err = capsys.readouterr().err
-    assert "run `pypm install`" in err
+    capsys.readouterr()
+    assert "run `pypm install`" in pypm_caplog.text
 
 
 def test_publish_via_cli(tmp_path, make_archive: Callable[..., Path], capsys):
@@ -156,7 +156,7 @@ def test_install_locked_missing_lockfile(tmp_path):
 
 
 def test_install_locked_rejects_malformed_dependency_constraint(
-    tmp_path, build_registry: Callable[..., Path], capsys
+    tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog
 ):
     registry_dir = build_registry({"shared": {"1.0.0": {}}})
     project = tmp_path / "project"
@@ -175,8 +175,8 @@ def test_install_locked_rejects_malformed_dependency_constraint(
     lock_path.write_text(json.dumps(lock_data, indent=2) + "\n", encoding="utf-8")
 
     assert _run(project, registry_dir, "install", "--locked") == 1
-    err = capsys.readouterr().err
-    assert "invalid constraint" in err
+    capsys.readouterr()
+    assert "invalid constraint" in pypm_caplog.text
 
 
 def test_remove_makes_verify_fail_until_install(tmp_path, build_registry: Callable[..., Path]):

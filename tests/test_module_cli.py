@@ -157,7 +157,7 @@ def test_cli_update_success(tmp_path, build_registry: Callable[..., Path], capsy
 
 
 def test_cli_sync_note_when_manifest_changes(
-    tmp_path, build_registry: Callable[..., Path], capsys
+    tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog
 ):
     registry_dir = build_registry({"alpha": {"1.0.0": {}}})
     project = tmp_path / "project"
@@ -166,11 +166,12 @@ def test_cli_sync_note_when_manifest_changes(
     assert _run(project, registry_dir, "install") == 0
     capsys.readouterr()
     assert _run(project, registry_dir, "add", "bravo", "1.0.0") == 0
-    assert "sync lockfile" in capsys.readouterr().err
+    capsys.readouterr()
+    assert "sync lockfile" in pypm_caplog.text
 
 
 def test_cli_resolve_store_note_on_version_mismatch(
-    tmp_path, build_registry: Callable[..., Path], capsys
+    tmp_path, build_registry: Callable[..., Path], capsys, pypm_caplog
 ):
     registry_dir = build_registry({"alpha": {"1.0.0": {}, "1.1.0": {}}})
     project = tmp_path / "project"
@@ -180,7 +181,8 @@ def test_cli_resolve_store_note_on_version_mismatch(
     capsys.readouterr()
     assert _run(project, registry_dir, "add", "alpha", "^1.0.0") == 0
     assert _run(project, registry_dir, "resolve") == 0
-    assert "sync .pypm/" in capsys.readouterr().err
+    capsys.readouterr()
+    assert "sync .pypm/" in pypm_caplog.text
 
 
 def test_cli_absolute_registry_path(tmp_path, build_registry: Callable[..., Path]):
@@ -201,7 +203,7 @@ def test_cli_absolute_registry_path(tmp_path, build_registry: Callable[..., Path
     assert code == 0
 
 
-def test_main_handles_resolution_failed(capsys):
+def test_main_handles_resolution_failed(pypm_caplog):
     conflict = Conflict(
         package="alpha",
         constraints=(),
@@ -211,20 +213,20 @@ def test_main_handles_resolution_failed(capsys):
 
     with mock.patch.object(cli, "_cmd_resolve", side_effect=ResolutionFailed(conflict)):
         assert cli.main(["resolve"]) == 1
-    assert "Could not resolve alpha." in capsys.readouterr().err
+    assert "Could not resolve alpha." in pypm_caplog.text
 
 
-def test_main_handles_registry_validation_error(capsys):
+def test_main_handles_registry_validation_error(pypm_caplog):
     with mock.patch.object(
         cli,
         "_cmd_verify",
         side_effect=RegistryValidationError(["registry index invalid"]),
     ):
         assert cli.main(["verify"]) == 1
-    assert "registry index invalid" in capsys.readouterr().err
+    assert "registry index invalid" in pypm_caplog.text
 
 
-def test_main_handles_pypm_error(capsys):
+def test_main_handles_pypm_error(pypm_caplog):
     with mock.patch.object(cli, "_cmd_list", side_effect=PyPMError("boom")):
         assert cli.main(["list"]) == 1
-    assert "error: boom" in capsys.readouterr().err
+    assert "error: boom" in pypm_caplog.text

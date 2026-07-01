@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import tarfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -10,6 +11,12 @@ from pathlib import Path
 import pytest
 
 from pypm_lab.publish import publish_archive
+
+
+@pytest.fixture
+def pypm_caplog(caplog):
+    with caplog.at_level(logging.INFO, logger="pypm_lab"):
+        yield caplog
 
 
 def _write_archive(
