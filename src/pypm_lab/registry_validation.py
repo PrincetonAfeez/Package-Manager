@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path, PurePosixPath
-import tarfile
+from pathlib import Path
 from typing import Any
 
 from .constraints import VersionConstraint
@@ -12,6 +11,7 @@ from .errors import RegistryValidationError
 from .integrity import integrity_for_file, parse_integrity
 from .jsonio import loads_no_duplicate_keys
 from .requirements import RequirementError, validate_package_name
+from .tar_safe import read_archive_manifest
 from .versions import Version, VersionError
 
 
@@ -146,41 +146,6 @@ def validate_new_entry(
     )
     if errors:
         raise RegistryValidationError(errors)
-
-
-def read_archive_manifest(path: Path | str) -> dict[str, Any]:
-    archive_path = Path(path)
-    try:
-        with tarfile.open(archive_path, "r:*") as archive:
-            members = [
-                member
-                for member in archive.getmembers()
-                if member.isfile() and PurePosixPath(member.name).name == "package.json"
-            ]
-            if not members:
-                raise RegistryValidationError([f"{archive_path}: missing package.json"])
-            # Use the shallowest package.json (the archive's root manifest), not the
-            # lexicographically first path, so a nested decoy cannot shadow it.
-            member = min(
-                members,
-                key=lambda item: (len(PurePosixPath(item.name).parts), item.name),
-            )
-            extracted = archive.extractfile(member)
-            if extracted is None:
-                raise RegistryValidationError([f"{archive_path}: cannot read {member.name}"])
-            try:
-                data = json.loads(extracted.read().decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise RegistryValidationError(
-                    [f"{archive_path}: malformed archive package.json: {exc}"]
-                ) from exc
-    except RegistryValidationError:
-        raise
-    except (OSError, tarfile.TarError) as exc:
-        raise RegistryValidationError([f"{archive_path}: cannot read archive: {exc}"]) from exc
-    if not isinstance(data, dict):
-        raise RegistryValidationError([f"{archive_path}: archive package.json must be an object"])
-    return data
 
 
 def _validate_version_entry(
